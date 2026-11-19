@@ -36,6 +36,12 @@ on:
       - 'Cargo.lock'
       - 'Cargo.toml'
   workflow_call:
+  workflow_dispatch:
+    inputs:
+      manager_only:
+        description: 'Compilar solo el manager (APK sin repack ni binarios nativos, no funcional como root)'
+        type: boolean
+        default: false
 
 jobs:
   generate-key:
@@ -95,6 +101,7 @@ jobs:
 
   build-lkm:
     needs: generate-key
+    if: ${{ github.event.inputs.manager_only != 'true' }}
     uses: ./.github/workflows/build-lkm.yml
     with:
       expected_size: ${{ needs.generate-key.outputs.expected_size || '' }}
@@ -102,10 +109,12 @@ jobs:
     secrets: inherit
 
   build-ksuinit:
+    if: ${{ github.event.inputs.manager_only != 'true' }}
     uses: ./.github/workflows/ksuinit.yml
 
   build-ksud:
     needs: [build-lkm, build-ksuinit]
+    if: ${{ github.event.inputs.manager_only != 'true' }}
     strategy:
       matrix:
         include:
@@ -120,6 +129,7 @@ jobs:
   
   build-ksud-extra:
     needs: [build-lkm, build-ksuinit]
+    if: ${{ github.event.inputs.manager_only != 'true' }}
     strategy:
       matrix:
         include:
@@ -194,9 +204,9 @@ jobs:
       - name: Build with Gradle
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            ./gradlew clean assembleRelease -PIS_PR_BUILD=true
+            ./gradlew clean assembleRelease -PIS_PR_BUILD=true -PKSU_PACKAGE_NAME=com.johan88.super
           else
-            ./gradlew clean assembleRelease
+            ./gradlew clean assembleRelease -PKSU_PACKAGE_NAME=com.johan88.super
           fi
 
       - name: Upload build artifact
@@ -215,7 +225,7 @@ jobs:
 
   repack-manager:
     needs: [build-manager, build-ksud, generate-key]
-    if: always() && needs.build-manager.result == 'success' && needs.build-ksud.result == 'success' && needs.generate-key.result == 'success'
+    if: always() && github.event.inputs.manager_only != 'true' && needs.build-manager.result == 'success' && needs.build-ksud.result == 'success' && needs.generate-key.result == 'success'
     runs-on: ubuntu-latest
 
     steps:
